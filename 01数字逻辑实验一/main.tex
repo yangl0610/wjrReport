@@ -1,0 +1,363 @@
+\documentclass{Phyport}
+
+\usepackage{hyperref}
+\usepackage{placeins}
+\hypersetup{colorlinks=true}
+
+\exname{数字逻辑实验一：七段数码管显示译码器设计}
+\extable{1}
+\instructor{待定}
+\class{待定}
+\name{待定}
+\stuid{待定}
+
+\nyear{2026}\nmonth{04}\nday{28}\nweekday{一}
+
+\begin{document}
+\decimal展区
+\phantomsection
+
+% ============== 预习报告 ==============
+\section{预习报告（10分）}
+\subsection{实验综述}
+
+本实验要求设计一个 8421BCD 码至七段数码管显示译码电路，在 FPGA 开发板上利用四个拨码开关输入一位十进制数字（0$\sim$9）的 8421BCD 编码，经组合逻辑译码后驱动七段数码管显示相应的十进制数字。
+
+实验采用 EP1C3 FPGA 开发板，通过 Quartus II 软件进行原理图设计，输入为四个拨码开关（对应 8421BCD 的 D、C、B、A 四位），输出为七段数码管的 a$\sim$g 七段控制信号（共阳极，低电平有效）。
+
+\subsection{实验原理要点}
+
+\subsubsection{FPGA 简介}
+FPGA（Field Programmable Gate Array，现场可编程门阵列）是一种硬件可重构的集成电路芯片。通过硬件描述语言（VHDL 或原理图）编写数字逻辑电路，FPGA 将程序映射为实际的门级硬件电路并执行。其基本结构包括逻辑单元（LE）、嵌入式 RAM、乘法器等资源，可实现组合逻辑、时序逻辑、寄存器等各类数字电路，且可无限次重新编程。
+
+\subsubsection{拨码开关输入}
+四位拨码开关作为 8421BCD 码输入信号。拨至 ON 位置时输入为低电平（0），拨至 OFF 位置时输入为高电平（1）。实验选用右排拨码开关的 3、4、5、6 位，对应引脚为 P50、P51、P53、P54（实验板管脚对应关系见附件）。
+
+拨码开关的真值表（开关打开 = 1，闭合 = 0）：
+
+\begin{table}[htbp!]
+    \centering
+    \begin{tabular}{|c|c|c|c|c|c|}
+        \hline
+        十进制 & D（开关3） & C（开关4） & B（开关5） & A（开关6） & 开关状态 \\
+        \hline
+        0 & 0 & 0 & 0 & 0 & ON OFF OFF OFF \\
+        \hline
+        1 & 0 & 0 & 0 & 1 & ON OFF OFF ON \\
+        \hline
+        2 & 0 & 0 & 1 & 0 & ON ON OFF OFF \\
+        \hline
+        3 & 0 & 0 & 1 & 1 & ON ON OFF ON \\
+        \hline
+        4 & 0 & 1 & 0 & 0 & OFF ON OFF OFF \\
+        \hline
+        5 & 0 & 1 & 0 & 1 & OFF ON OFF ON \\
+        \hline
+        6 & 0 & 1 & 1 & 0 & OFF ON ON OFF \\
+        \hline
+        7 & 0 & 1 & 1 & 1 & OFF ON ON ON \\
+        \hline
+        8 & 1 & 0 & 0 & 0 & ON OFF ON OFF \\
+        \hline
+        9 & 1 & 0 & 0 & 1 & ON OFF ON ON \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\subsubsection{七段数码管原理}
+实验板上的七段数码管为共阳极结构，即各段 LED 的阳极共用 VCC，段发光条件为对应阴极输入低电平（0）。数码管各段标记如下（共阳极，段亮 = 0）：
+
+七段数码管各段对应关系（共阳极，低电平有效）：
+
+\begin{figure}[htbp!]
+    \centering
+    \includegraphics[width=0.4\textwidth]{seven_segment.png}
+    \caption{七段数码管各段标记}
+\end{figure}
+
+对于十进制数字 $N$（BCD 输入为 DCBA），定义各段输出 $a,b,c,d,e,f,g$（0 = 亮，1 = 灭）。由显示需求可得如下真值表。
+
+\subsubsection{8421BCD 译码真值表}
+
+\begin{table}[htbp!]
+    \centering
+    \begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|}
+        \hline
+        \multirow{2}{*}{十进制} & \multicolumn{4}{|c|}{BCD 输入} & \multicolumn{7}{|c|}{段输出（0 = 亮）} \\
+        \cline{2-11}
+        & D & C & B & A & a & b & c & d & e & f & g \\
+        \hline
+        0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 \\
+        \hline
+        1 & 0 & 0 & 0 & 1 & 1 & 0 & 0 & 1 & 1 & 1 & 1 \\
+        \hline
+        2 & 0 & 0 & 1 & 0 & 0 & 0 & 1 & 0 & 0 & 1 & 0 \\
+        \hline
+        3 & 0 & 0 & 1 & 1 & 0 & 0 & 0 & 0 & 1 & 1 & 0 \\
+        \hline
+        4 & 0 & 1 & 0 & 0 & 1 & 0 & 0 & 1 & 1 & 0 & 0 \\
+        \hline
+        5 & 0 & 1 & 0 & 1 & 0 & 1 & 0 & 0 & 1 & 0 & 0 \\
+        \hline
+        6 & 0 & 1 & 1 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 \\
+        \hline
+        7 & 0 & 1 & 1 & 1 & 0 & 0 & 0 & 1 & 1 & 1 & 1 \\
+        \hline
+        8 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        \hline
+        9 & 1 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 1 & 0 & 0 \\
+        \hline
+        \hline
+        \multirow{2}{*}{*} & 1 & 0 & 1 & 0 & \multicolumn{7}{|c|}{\multirow{2}{*}{显示熄灭（空白）}} \\
+        \cline{2-5}
+        * & 1 & 0 & 1 & 1 & \multicolumn{7}{|c|}{} \\
+        \hline
+        * & 1 & 1 & 0 & 0 & \multicolumn{7}{|c|}{\multirow{4}{*}{显示熄灭（空白）}} \\
+        \cline{2-5}
+        * & 1 & 1 & 0 & 1 & \multicolumn{7}{|c|}{} \\
+        \cline{2-5}
+        * & 1 & 1 & 1 & 0 & \multicolumn{7}{|c|}{} \\
+        \cline{2-5}
+        * & 1 & 1 & 1 & 1 & \multicolumn{7}{|c|}{} \\
+        \hline
+    \end{tabular}
+    \caption{8421BCD 至七段数码管译码真值表}
+\end{table}
+
+注：输入 DCBA = 1010$\sim$1111（十进制 10$\sim$15）为无效 BCD 码，表中使各段输出均为 1（共阳极下即为全部熄灭）。
+
+\subsubsection{各段输出表达式推导}
+
+对有效输入（DCBA = 0000$\sim$1001），利用卡诺图法化简各段输出（0 表示该段点亮，1 表示熄灭）。无效 BCD 输入（$D=1, C=0, A=1$ 等组合）统一令各段为 1，使显示熄灭。
+
+\bigskip
+\textbf{段 a：}输出为 0 的输入：\{0, 2, 3, 5, 6, 7, 8, 9\}，化简得
+\[
+\boxed{a' = D + C + BA + B'A'},\qquad a = \overline{D + C + BA + B'A'} = \overline{D}\,\overline{C}\,\overline{BA}\,\overline{B'A'}
+\]
+
+\textbf{段 b：}输出为 0 的输入：\{0, 1, 2, 3, 4, 7\}，化简得
+\[
+\boxed{b' = B'},\qquad b = B
+\]
+
+\textbf{段 c：}输出为 0 的输入：\{0, 1, 2, 6, 8\}，化简得
+\[
+\boxed{c' = C},\qquad c = \overline{C}
+\]
+
+\textbf{段 d：}输出为 0 的输入：\{0, 1, 3, 4, 5, 6, 7, 8, 9\}，化简得
+\[
+\boxed{d' = D'C'B'A' + C'B'},\qquad d = \overline{D'C'B'A' + C'B'}
+\]
+
+\textbf{段 e：}输出为 0 的输入：\{0, 2, 6, 8\}，化简得
+\[
+\boxed{e' = D'C'A + D'B'A'},\qquad e = \overline{D'C'A + D'B'A'}
+\]
+
+\textbf{段 f：}输出为 0 的输入：\{0, 4, 5, 6, 7, 8, 9\}，化简得
+\[
+\boxed{f' = D'C'A + D'B'A' + D'C'},\qquad f = \overline{D'C'A + D'B'A' + D'C'}
+\]
+
+\textbf{段 g：}输出为 0 的输入：\{2, 3, 4, 5, 6, 9\}，化简得
+\[
+\boxed{g = D + C + B + A}
+\]
+
+\subsection{实验重点（3分）}
+\begin{enumerate}
+  \item 理解 8421BCD 码的编码规则，掌握七段数码管的显示原理；
+  \item 学会使用卡诺图法对组合逻辑电路进行化简；
+  \item 掌握 Quartus II 原理图输入法设计组合逻辑电路的基本流程。
+\end{enumerate}
+
+\subsection{实验难点（2分）}
+\begin{enumerate}
+  \item 组合逻辑表达式的卡诺图化简，特别是多变量时的最简与或式推导；
+  \item FPGA 原理图设计中的元件选用、连线和管脚分配；
+  \item 时序仿真波形的正确设置与结果分析。
+\end{enumerate}
+
+% ============== 原始数据 ==============
+\newpage
+\section{数字逻辑实验一 —— 实验原始数据}
+\vspace{5mm}
+
+\textbf{1. 实验环境}
+
+\vspace{2mm}
+\begin{tabular}{|l|c|c|}
+    \hline
+    项目 & 符号/名称 & 说明 \\
+    \hline
+    开发板 & EP1C3 & FPGA 核心芯片 \\
+    \hline
+    设计软件 & Quartus II 13.1 & 原理图输入法 \\
+    \hline
+    编程接口 & JTAG & 下载至 FPGA 芯片 \\
+    \hline
+\end{tabular}
+
+\vspace{8mm}
+\textbf{2. 拨码开关输入真值记录（实验中记录）}
+
+\vspace{2mm}
+\begin{table}[htbp!]
+    \centering
+    \begin{tabular}{|c|c|c|c|c|c|}
+        \hline
+        十进制 & D & C & B & A & 数码管显示 \\
+        \hline
+        0 &  &  &  &  &  \\
+        \hline
+        1 &  &  &  &  &  \\
+        \hline
+        2 &  &  &  &  &  \\
+        \hline
+        3 &  &  &  &  &  \\
+        \hline
+        4 &  &  &  &  &  \\
+        \hline
+        5 &  &  &  &  &  \\
+        \hline
+        6 &  &  &  &  &  \\
+        \hline
+        7 &  &  &  &  &  \\
+        \hline
+        8 &  &  &  &  &  \\
+        \hline
+        9 &  &  &  &  &  \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\vspace{5mm}
+\textbf{3. 管脚约束记录}
+
+\begin{table}[htbp!]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        信号名 & 方向 & FPGA 引脚 & 板上器件 \\
+        \hline
+        D（BCD 最高位） & 输入 & P50 & 拨码开关 3 \\
+        \hline
+        C & 输入 & P51 & 拨码开关 4 \\
+        \hline
+        B & 输入 & P53 & 拨码开关 5 \\
+        \hline
+        A（BCD 最低位） & 输入 & P54 & 拨码开关 6 \\
+        \hline
+        a & 输出 & P42 & 七段数码管段 a \\
+        \hline
+        b & 输出 & P43 & 七段数码管段 b \\
+        \hline
+        c & 输出 & P44 & 七段数码管段 c \\
+        \hline
+        d & 输出 & P45 & 七段数码管段 d \\
+        \hline
+        e & 输出 & P46 & 七段数码管段 e \\
+        \hline
+        f & 输出 & P39 & 七段数码管段 f \\
+        \hline
+        g & 输出 & P40 & 七段数码管段 g \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\vspace{10mm}
+
+% ------- 签名区 -------
+\begin{flushright}
+    \begin{tabular}{ll}
+        \textbf{实验人：} & \underline{\hspace{3cm}} \\[3mm]
+        \textbf{教师签字：} & \underline{\hspace{3cm}} \\[3mm]
+        \textbf{日\qquad 期：} & \underline{\hspace{3cm}} \\
+    \end{tabular}
+\end{flushright}
+\newpage
+
+% ============== 结果与分析 ==============
+\section{结果与分析（60分）}
+\subsection{电路设计（20分）}
+
+根据上述布尔表达式，在 Quartus II 中采用原理图输入法实现七段译码器。设计中使用的逻辑门元件均从 Primitives/logic 库中调用，包括：
+\begin{itemize}
+  \item \textbf{与门（and）}：多输入与门，实现乘积项
+  \item \textbf{或门（or）}：多输入或门，实现求和项
+  \item \textbf{非门（not）}：单输入非门，实现取反
+\end{itemize}
+
+各段输出 $a\sim g$ 分别由对应的布尔表达式控制，输出至七段数码管。
+
+\begin{figure}[htbp!]
+    \centering
+    \includegraphics[width=0.8\textwidth]{schematic.png}
+    \caption{七段译码器原理图}
+\end{figure}
+
+\FloatBarrier
+
+\subsection{仿真波形（20分）}
+
+设置时序仿真，波形总时长覆盖 0$\sim$200 ns，输入 D、C、B、A 按 BCD 计数序列依次变化，验证各段输出是否符合真值表。
+
+\begin{figure}[htbp!]
+    \centering
+    \includegraphics[width=0.9\textwidth]{simulation.png}
+    \caption{七段译码器功能仿真波形}
+\end{figure}
+
+\FloatBarrier
+
+\subsection{下载验证（20分）}
+
+将编译生成的配置文件通过 JTAG 接口下载至 EP1C3 开发板，改变拨码开关状态，观察数码管显示是否与预期一致。
+
+\begin{table}[htbp!]
+    \centering
+    \begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|}
+        \hline
+        \multirow{2}{*}{输入 DCBA} & \multirow{2}{*}{预期显示} & \multicolumn{7}{|c|}{实测段输出} & \multirow{2}{2cm}{实际显示} & \multirow{2}{*}{是否正确} \\
+        \cline{3-9}
+        & & a & b & c & d & e & f & g & & \\
+        \hline
+        0000 & 0 &  &  &  &  &  &  &  &  & \\
+        \hline
+        0001 & 1 &  &  &  &  &  &  &  &  & \\
+        \hline
+        0010 & 2 &  &  &  &  &  &  &  &  & \\
+        \hline
+        0011 & 3 &  &  &  &  &  &  &  &  & \\
+        \hline
+        0100 & 4 &  &  &  &  &  &  &  &  & \\
+        \hline
+        0101 & 5 &  &  &  &  &  &  &  &  & \\
+        \hline
+        0110 & 6 &  &  &  &  &  &  &  &  & \\
+        \hline
+        0111 & 7 &  &  &  &  &  &  &  &  & \\
+        \hline
+        1000 & 8 &  &  &  &  &  &  &  &  & \\
+        \hline
+        1001 & 9 &  &  &  &  &  &  &  &  & \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\section{思考题（10分）}
+\begin{enumerate}
+  \item 若将七段数码管改为共阴极（低电平驱动阳极），电路设计方案应如何修改？
+  \item 当 BCD 输入为无效码（如 1010）时，本设计使显示熄灭。请说明这样处理的原因及意义。
+  \item 如果要求扩展为同时显示两位十进制数（使用两个数码管），电路结构应做何修改？
+\end{enumerate}
+
+\begin{thebibliography}{9}
+  \bibitem{quartus-guide} 数字逻辑实验一讲解（课堂 PPT）.
+  \bibitem{ep1c3-pin} EP1C3 开发板管脚对应关系说明文档.
+\end{thebibliography}
+
+\input{注意事项}
+\end{document}
